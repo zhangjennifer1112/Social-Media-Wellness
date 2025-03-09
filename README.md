@@ -12,6 +12,8 @@ Linear and logistic regression models were fit in R. Model fit was assessed to d
 3) Many factors that go into mental health are unaccounted for in the survey
 4) Missing values in dataset
 
-Data visualizations were created in Tableau. (insert link) 
+"social_media_presentation" file in this repository contains more information about study background, data cleaning and analysis details, visualizations, and results.
+
+Data visualizations and dashboards were also created in Tableau. (link) 
 
 All in all, further study with more data or a more complex model is needed to reach a firm conclusion.
