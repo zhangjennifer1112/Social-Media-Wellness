@@ -1,0 +1,445 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+```{r}
+library(knitr)
+library(alr4)
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+```{r}
+# read in survey data
+data.raw <- read.csv("~/Downloads/social media use and mental health (Responses) - Form Responses 1.csv", comment.char="#")
+
+# remove time stamp column
+data.raw <- data.raw[2:ncol(data.raw)]
+
+# edit column names
+library(dplyr)
+data.raw <- data.raw %>%
+  rename(age=1, race=2, gender=3, income=4, education=5, employment=6, sm_use=7, sm_hours=8, sm_years=9, num_platforms=10, sm_work=11, stress=12, anxiety=13, depression=14, inadequacy=15, cyberbullying=16, mh_diagnosis=17, therapy=18, medication=19, sleep_hrs=20)
+
+# remove commas from income column
+data.raw$income <- as.numeric(gsub(",", "", data.raw$income))
+# substitute blank values
+# data$employment <- ifelse(trimws(data$employment) == "", NA, data$employment)
+
+data.raw$education[data.raw$education == "PhD/MD/DO/JD/DDS/Other professional degree"] <- "PhD/Other professional"
+
+# remove NA's
+data <- na.omit(data.raw)
+
+# number of values removed
+nrow(data.raw)
+nrow(data)
+
+# removed 30 NA
+```
+
+```{r}
+### VARIABLE CONVERSION ###
+
+## CREATE BINARY VARIABLES
+# stress (binary)
+data$stress.bin <- ifelse(data$stress>=5,1,0)
+# anxiety (binary)
+data$anxiety.bin <- ifelse(data$anxiety>=5,1,0)
+# depression (binary)
+data$depression.bin <- ifelse(data$depression>=5,1,0)
+# inadequacy (binary)
+data$inadequacy.bin <- ifelse(data$inadequacy>=5,1,0)
+
+## CONVERT TO BINARY VARIABLES
+# using social media for work
+data$sm_work <- ifelse(data$sm_work=="Yes",1,0)
+# mental health diagnosis by licensed professional
+data$mh_diagnosis <- ifelse(data$mh_diagnosis=="Yes",1,0)
+# currently seeking therapy
+data$therapy <- ifelse(data$therapy=="Yes",1,0)
+# currently taking medication for mental health condition
+data$medication <- ifelse(data$medication=="Yes",1,0)
+
+## TOTALS
+# total score (all 4 numerical rating scales combined)
+data$total.score <- data$stress + data$anxiety+ data$depression + data$inadequacy
+# total # conditions experiences
+data$total.conditions <- data$stress.bin + data$anxiety.bin +data$depression.bin + data$inadequacy.bin
+
+## CONVERTING TO CATEGORICAL VARIABLES & SETTING REFERENCE LEVEL
+# convert race to categorical 
+data$race <- as.factor(data$race)
+data$race <- relevel(data$race, ref="other")
+
+# convert gender
+data$gender <- as.factor(data$gender)
+data$gender <- relevel(data$gender, ref="male")
+# only 3 observations in Other is causing abnormal estimates
+
+# convert education 
+data$education <- as.factor(data$education)
+data$education <- relevel(data$education, ref="high school")
+
+# convert cyberbullying
+data$cyberbullying <- relevel(as.factor(data$cyberbullying), ref="No")
+```
+
+
+```{r}
+write.csv(data, file="~/Desktop/LMRI/social_media.csv")
+```
+
+```{r visual}
+### VISUALIZATIONS 
+
+# RACE
+library(ggplot2)
+race1 <- ggplot(data, aes(x=race, fill=race)) + geom_bar(color="white")+theme_bw()+labs(x="Race", y="Count")+ggtitle("Race Distribution")
+
+# EDUCATION
+edu1 <- ggplot(data, aes(x=education, fill=education))+geom_bar(color="white") + theme_bw()+ ggtitle("Education Distribution") + scale_x_discrete(labels = c("middle school or less" = "", "high school" = "", "bachelors" = "", "masters"="", "PhD/Other professional"=""))
+
+# AGE
+age_stats <- data |>
+summarize(mean_age = mean(age))
+
+age_hist <- ggplot(data, aes(x=age)) +geom_histogram(binwidth=1,  color="white",fill="turquoise")+ theme_bw() + labs(x ='Age', y='Count', title = 'Age Distribution') + geom_vline(aes(xintercept = mean_age), age_stats, color = "red", linewidth = 0.5)
+
+
+# INCOME
+income_stats <- data |> summarize(mean_income = mean(income))
+
+income_hist <- ggplot(data, aes(x=income)) +geom_histogram(binwidth=10000, color="white",fill="forestgreen")+ theme_bw() + labs(x ='Income', y='Count', title = 'Income Distribution') + geom_vline(aes(xintercept = mean_income), income_stats, color = "red", linewidth = 0.5)
+
+empl1 <- ggplot(data, aes(x=employment, fill=employment)) + geom_bar(color="white")+theme_bw()+labs(x="Employment Status", y="Count")+ggtitle("Employment Distribution")
+
+ggarrange(race1, empl1, age_hist, income_hist, ncol=2, nrow=2, labels=c("A","B", "C","D"))
+```
+
+
+```{r visual}
+edu1
+```
+
+```{r}
+## MERGING CATEGORIES
+# merging race
+## create other category for categories not white and asian
+data$race[data$race=="hispanic or latino"] <- "other"
+data$race[data$race=="black or african american"] <- "other"
+
+# race plot after merging
+race2 <- ggplot(data, aes(x=race, fill=race)) + geom_bar(color="white")+theme_bw()+labs(x="Race", y="Count")+ggtitle("Race Distribution")
+
+# merge employment
+## create other category for categories not full-time, part-time, or student
+data <- data %>%
+  mutate(employment = if_else(employment %in% c("Full time", "Part time", "student"), employment, "other"))
+
+# convert employment
+data$employment <- as.factor(data$employment)
+# relevel employment
+data$employment <- relevel(data$employment, ref="other")
+
+# employment plot after merging
+empl2 <- ggplot(data, aes(x=employment, fill=employment)) + geom_bar(color="white")+theme_bw()+labs(x="Employment Status", y="Count")+ggtitle("Employment Status Distribution")
+
+ggarrange(race2, empl2, ncol=2, nrow=1, labels=c("A","B"))
+
+# unsure if I should merge education since the two levels with the least responses are on opposite ends of the spectrum
+```
+
+
+```{r}
+# stress
+plot.stressbin <- ggplot(data, aes(x=as.integer(stress.bin))) + geom_bar(color="white", fill="steelblue")+theme_bw()+labs(x="Stress Status", y="Count")+ggtitle("Stress Counts") + scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) 
+
+# anxiety
+plot.anxietybin <- ggplot(data, aes(x=as.integer(anxiety.bin))) + geom_bar(color="white", fill="rosybrown1")+theme_bw()+labs(x="Anxiety Status", y="Count")+ggtitle("Anxiety Counts") + scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) 
+
+# depression
+plot.depressionbin <- ggplot(data, aes(x=as.integer(depression.bin))) + geom_bar(color="white", fill="lightgreen")+theme_bw()+ labs(x="Depression Status", y="Count")+ggtitle("Depression Counts") + scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) 
+
+ggarrange(plot.stressbin, plot.anxietybin, plot.depressionbin, ncol=3, nrow=1, labels=c("A","B","C"))
+```
+
+# Linear Regression
+```{r}
+# convert income to numeric variable
+data$income <- as.numeric(data$income)
+data$sm_years <- as.numeric(data$sm_years)
+data$num_platforms <- as.numeric(data$num_platforms)
+```
+
+```{r}
+## initial model
+
+lm_base <- lm(total.score~sm_hours, data=data)
+summary(lm_base)
+#initial scatterplot
+plot(total.score~sm_hours, data=data, pch=20, xlab="Hours Spent on Social Media", ylab="Total Mental Health Score", main="Mental Health Score vs. Social Media Hours")
+grid(lty="solid")
+abline(lm_base, col="red", lwd=2)
+```
+
+
+```{r}
+## visualize correlations 
+
+# pairs plot
+# pairs(~total.score+age+income+sm_hours+sm_years+num_platforms+sleep_hrs, data=data, pch=20)
+
+# apply log transform to age and income to linearize data
+# pairs(~total.score+log(age)+log(income)+sm_hours+sm_years+num_platforms+sleep_hrs, data=data, pch=20)
+
+#look for collinearity between all variables in dataset
+library(GGally)
+ggpairs(data, columns=c(25,1,4,8,9,10,20))
+
+# #log transformed age and income
+# data$log.age <- log(data$age) #col 27 (old 1)
+# data$log.income <- log(data$income) # col 28 (old 4)
+# ggpairs(data, columns=c(25,27,28,8,9,10,20))
+
+# LOG TRANSFORMING INCOME TURNS 0 TO -INF
+
+# proposed model
+# collinearity between sm_hours and sm_years
+lm_proposed <- lm(total.score~age+income+sm_hours+sm_years+num_platforms+sleep_hrs, data=data)
+summary(lm_proposed) #only num_platforms is significant
+
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(lm_proposed, pch=20)
+```
+
+```{r}
+# backwards selection
+# step(lm_proposed, direction="backward")
+
+# model after backwards selection
+lm_new <- lm(total.score ~ sm_hours+num_platforms+sleep_hrs, data = data)
+summary(lm_new)
+
+round(cbind(summary(lm_new)$coef, confint(lm_new)),4)
+```
+
+
+```{r}
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(lm_new, pch=20)
+
+par(mar=c(2,2,2,2))
+residualPlots(lm_new)
+
+#regression diagnostics
+ncvTest(lm_new)
+outlierTest(lm_new)
+```
+
+```{r}
+plot(lm_new, pch=20)
+```
+
+
+```{r}
+outlierTest(lm_new)
+```
+
+# Logistic Regression
+```{r warning=FALSE}
+# Stress
+
+# initial model exclude sm_hours (predictor of interest)
+mod.stress.back <- glm(stress.bin~ age+race+gender+income+education+employment+num_platforms+sm_years+sm_work+therapy+cyberbullying, family=binomial(), data=data)
+# summary(og.mod.stress)
+
+## BACKWARDS SELECTION BY p-value （NOT WORKING)
+# library(logistf)
+# log.stress <- logistf(stress.bin~age+race+gender+income+education+employment+num_platforms+sm_years, family=binomial(link="logit"), data=data)
+# blog.stress <- backward(log.stress, slstay=0.2)
+
+# BACKWARDS SELECTION BY AIC
+step(mod.stress.back, direction="backward")
+
+# add sm_hours back
+mod.stress <- glm(stress.bin ~ sm_hours + race + income + education + employment + num_platforms+cyberbullying, family=binomial(), data=data)
+
+# model summary
+cbind(exp(coef(mod.stress)),exp(confint(mod.stress)))
+
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(mod.stress, pch=20)
+
+# hosmer lemeshow test
+generalhoslem::logitgof(data$stress.bin, mod.stress$fitted.values)
+# model is not a good fit, diagnostic plots are weird too
+
+# influencePlot(mod.stress)
+```
+
+```{r}
+# aggregating data
+# what is the purpose of aggregating?
+agg_data <- aggregate(stress.bin ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years+ sm_work+ therapy+cyberbullying, data=data, FUN=sum)
+
+agg_data <- cbind(agg_data, aggregate(stress.bin ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years+ sm_work+therapy+cyberbullying, data=data,FUN=length)[,13]) #[,10] removes repeating columns (10 is number of terms in model)
+names(agg_data)[14] <- "tot"
+kable(head(agg_data))
+
+#aggregated model
+agg.mod.stress.og <-glm(stress.bin/tot ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years+sm_work+therapy+cyberbullying, family = binomial(link = "logit"), data = agg_data, weight=tot)
+# summary(agg.mod.stress)
+
+#backwards selection on agg model
+#exclude sm_hours
+# BACKWARDS SELECTION BY P-VALUE NOT WORKING
+# agg_back_b = logistf(stress.bin/tot ~ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years,
+#                    family = binomial(link="logit"),
+#                    data = agg_data,
+#                    weights = tot)
+# agg_reduced_b = backward(agg_back_b, slstay = 0.1, data=agg_data)
+
+agg.back <- glm(stress.bin/tot ~ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years + sm_work+therapy+cyberbullying, family = binomial(link = "logit"), data = agg_data, weight=tot)
+# step(agg.back, direction="backward")
+
+# new model
+agg.mod.stress <- glm(formula = stress.bin/tot ~ sm_hours + race + income + education + employment + 
+    num_platforms + cyberbullying, family = binomial(link = "logit"), data = agg_data, 
+    weights = tot)
+
+#plot with aggregating data
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(agg.mod.stress, pch=20)
+
+#deviance gof
+pchisq(agg.mod.stress$deviance, df=agg.mod.stress$df.residual, lower.tail = F)
+#p-value is highly significant -> still not a good fit
+
+influencePlot(agg.mod.stress) #78, 84 are very influential with high residual (difference between observed and expected) and high cook's distance (effect of deleting observation)
+outlierTest(agg.mod.stress)
+
+agg.stress.outliers <- match(c(37,61,92,43), row.names(agg_data))
+agg_data[agg.stress.outliers,]
+```
+
+```{r}
+# removing outliers and re-creating model
+
+agg_data_new = agg_data[-c(37,61,92,43),]
+adj.agg.mod.stress <- glm(formula = stress.bin/tot ~ sm_hours + race + income + education + employment + num_platforms + cyberbullying, family = binomial(link = "logit"), data = agg_data_new, weights = tot)
+summary(adj.agg.mod.stress)
+
+#plot with aggregating data
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(adj.agg.mod.stress, pch=20)
+
+#deviance gof
+pchisq(adj.agg.mod.stress$deviance, df=adj.agg.mod.stress$df.residual, lower.tail = F)
+#p-value is still highly significant but less significant than before
+```
+
+```{r}
+## COMPARING PERCENTAGES
+
+r1 <- ggplot(data, aes(fill=as.factor(stress.bin), x=race)) +geom_bar(position="fill")+scale_y_continuous(labels = scales::percent)+labs(x="Race",y="Percentage",title="Stress by Race")+scale_fill_discrete(name = "Stress Indicator")
+
+r2 <- ggplot(data, aes(fill=as.factor(stress.bin), x=education)) +
+    geom_bar(position="fill")+scale_y_continuous(labels = scales::percent)+labs(x="Education",y="Percentage",title="Stress by Education Level")+scale_fill_discrete(name = "Stress Indicator")
+
+r3 <- ggplot(data, aes(fill=as.factor(stress.bin), x=employment)) +
+    geom_bar(position="fill")+scale_y_continuous(labels = scales::percent)+labs(x="Employment",y="Percentage",title="Stress by Employment")+scale_fill_discrete(name = "Stress Indicator")
+  
+# library(ggpubr)  
+ggarrange(r1,r2,r3, ncol=2, nrow=2, labels=c("A","B","C"))
+```
+
+```{r warning=FALSE}
+# FINAL TABLE WITH adjusted aggregated model
+final_table = cbind(exp(adj.agg.mod.stress$coefficients),
+                    summary(adj.agg.mod.stress)$coefficients[,4],
+                    exp(confint(adj.agg.mod.stress, level = 0.9)),
+                    sqrt(diag(vcov(adj.agg.mod.stress))))
+colnames(final_table) = c("Estimate", "Pr(>|z|)", "5%", "95%", "Std. Error")
+print(final_table)
+```
+
+```{r warning=FALSE}
+# Anxiety
+
+# exclude sm_hours (predictor of interest)
+
+og.mod.anxiety <- glm(anxiety.bin~age+race+gender+income+education+employment+num_platforms+sm_years, family=binomial(), data=data)
+# summary(og.mod.anxiety)
+
+## BACKWARDS SELECTION BY p-value （NOT WORKING)
+# library(logistf)
+# log.anxiety <- logistf(anxiety.bin~age+race+gender+income+education+employment+num_platforms+sm_years, family=binomial(link="logit"), data=data)
+# blog.anxiety <- backward(log.anxiety, slstay=0.2)
+
+anxiety.back <- step(og.mod.anxiety, direction="backward")
+
+# add sm_hours back
+mod.anxiety <- glm(anxiety.bin ~ sm_hours + race + income + education + employment + num_platforms, family=binomial(), data=data)
+
+# model summary
+cbind(exp(coef(mod.anxiety)),exp(confint(mod.anxiety)))
+
+plot(mod.anxiety)
+```
+
+
+```{r warning=FALSE}
+# hosmer lemeshow test
+generalhoslem::logitgof(data$anxiety.bin, mod.anxiety$fitted.values)
+
+# p-value is not significant 
+# model IS a good fit, but diagnostic plots are wack
+```
+
+```{r}
+# aggregating data
+# what is the purpose of aggregating?
+agg_data <- aggregate(anxiety.bin ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years, data=data, FUN=sum)
+agg_data <- cbind(agg_data, aggregate(anxiety.bin ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years, data=data,FUN=length)[,10]) #[,10] removes repeating columns (10 is number of terms in model)
+names(agg_data)[11] <- "tot"
+kable(head(agg_data))
+
+#aggregated model
+agg.mod.anxiety.og <-glm(anxiety.bin/tot ~ sm_hours+ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years, family = binomial(link = "logit"), data = agg_data, weight=tot)
+# summary(agg.mod.anxiety)
+
+#backwards selection on agg model
+#exclude sm_hours
+# BACKWARDS SELECTION BY P-VALUE NOT WORKING
+# agg_back_b = logistf(anxiety.bin/tot ~ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years,
+#                    family = binomial(link="logit"),
+#                    data = agg_data,
+#                    weights = tot)
+# agg_reduced_b = backward(agg_back_b, slstay = 0.1, data=agg_data)
+
+agg.back <- glm(anxiety.bin/tot ~ age+ race+ gender+ income+ education+ employment+ num_platforms+ sm_years, family = binomial(link = "logit"), data = agg_data, weight=tot)
+step(agg.back, direction="backward")
+
+# new model
+agg.mod.anxiety <- glm(formula = anxiety.bin/tot ~ sm_hours + race + income + education + employment + 
+    num_platforms, family = binomial(link = "logit"), data = agg_data, 
+    weights = tot)
+
+#plot with aggregating data
+par(mfrow=c(2,2), mar=c(2,2,2,2))
+plot(agg.mod.anxiety, pch=20)
+
+#deviance gof
+pchisq(agg.mod.anxiety$deviance, df=agg.mod.anxiety$df.residual, lower.tail = F)
+#p-value is highly significant -> still not a good fit
+
+influencePlot(agg.mod.anxiety) #78, 84 are very influential with high residual (difference between observed and expected) and high cook's distance (effect of deleting observation)
+outlierTest(agg.mod.anxiety)
+
+# agg.anxiety.outliers <- match(c(84,78,59,27), row.names(agg_data))
+# agg_data[agg.anxiety.outliers,]
+```
